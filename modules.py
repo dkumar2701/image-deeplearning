@@ -132,22 +132,22 @@ class UNet(nn.Module):
         self.time_dim = time_dim
         self.inc = DoubleConv(c_in, 64)
         self.down1 = Down(64, 128)
-        self.sa1 = SelfAttention(128, 32)
+        self.sa1 = SelfAttention(128, 16)
         self.down2 = Down(128, 256)
-        self.sa2 = SelfAttention(256, 16)
+        self.sa2 = SelfAttention(256, 8)
         self.down3 = Down(256, 256)
-        self.sa3 = SelfAttention(256, 8)
+        self.sa3 = SelfAttention(256, 4)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
         self.up1 = Up(512, 128)
-        self.sa4 = SelfAttention(128, 16)
+        self.sa4 = SelfAttention(128, 8)
         self.up2 = Up(256, 64)
-        self.sa5 = SelfAttention(64, 32)
+        self.sa5 = SelfAttention(64, 16)
         self.up3 = Up(128, 64)
-        self.sa6 = SelfAttention(64, 64)
+        self.sa6 = SelfAttention(64, 32)
         self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
     def pos_encoding(self, t, channels):
@@ -193,22 +193,22 @@ class UNet_conditional(nn.Module):
         self.time_dim = time_dim
         self.inc = DoubleConv(c_in, 64)
         self.down1 = Down(64, 128)
-        self.sa1 = SelfAttention(128, 32)
+        self.sa1 = SelfAttention(128, 16)
         self.down2 = Down(128, 256)
-        self.sa2 = SelfAttention(256, 16)
+        self.sa2 = SelfAttention(256, 8)
         self.down3 = Down(256, 256)
-        self.sa3 = SelfAttention(256, 8)
+        self.sa3 = SelfAttention(256, 4)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
         self.up1 = Up(512, 128)
-        self.sa4 = SelfAttention(128, 16)
+        self.sa4 = SelfAttention(128, 8)
         self.up2 = Up(256, 64)
-        self.sa5 = SelfAttention(64, 32)
+        self.sa5 = SelfAttention(64, 16)
         self.up3 = Up(128, 64)
-        self.sa6 = SelfAttention(64, 64)
+        self.sa6 = SelfAttention(64, 32)
         self.outc = nn.Conv2d(64, c_out, kernel_size=1)
 
         if num_classes is not None:
@@ -254,10 +254,12 @@ class UNet_conditional(nn.Module):
 
 
 if __name__ == '__main__':
-    # net = UNet(device="cpu")
-    net = UNet_conditional(num_classes=10, device="cpu")
+    net = UNet(device="cpu")
+    # net = UNet_conditional(num_classes=10, device="cpu")
     print(sum([p.numel() for p in net.parameters()]))
-    x = torch.randn(3, 3, 64, 64)
+    # x = torch.randn(3, 3, 64, 64)
+    x = torch.randn(3, 3, 32, 32)
     t = x.new_tensor([500] * x.shape[0]).long()
-    y = x.new_tensor([1] * x.shape[0]).long()
-    print(net(x, t, y).shape)
+    print(net(x, t).shape)
+    # y = x.new_tensor([1] * x.shape[0]).long()
+    # print(net(x, t, y).shape)
