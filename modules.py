@@ -364,6 +364,69 @@ class UNet_2xUD_halfchannels(nn.Module):
         output = self.outc(x)
         return output
 
+
+
+
+class SmallUNet_1(nn.Module):
+  """
+  Equivalent to UNet_2xUD_halfchannels except with a smaller bottleneck
+  """
+  def __init__(self, c_in=3, c_out=3, time_dim=256, device="cpu"):
+      super().__init__()
+      self.device = device
+      self.time_dim = time_dim
+      self.inc = DoubleConv(c_in, 32)
+      self.down1 = Down(32, 64)
+      self.sa1 = SelfAttention(64, 16)  
+      self.down2 = Down(64, 128)
+      self.sa2 = SelfAttention(128, 8)
+
+      self.bot1 = DoubleConv(128, 256)
+      self.bot2 = DoubleConv(256, 128)
+
+      self.up1 = Up(192, 64)
+      self.sa4 = SelfAttention(64, 16)
+      self.up2 = Up(96, 64)
+      self.outc = nn.Conv2d(64, c_out, kernel_size=1)
+
+  def pos_encoding(self, t, channels):
+      inv_freq = 1.0 / (
+          10000
+          ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
+      )
+
+      inv_freq = inv_freq.to(self.device) #should be unnecessary, but I'm running into problems
+      t = t.to(self.device)
+
+      pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
+      pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
+      pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+      return pos_enc
+
+  def forward(self, x, t):
+      t = t.unsqueeze(-1).type(torch.float)
+      t = self.pos_encoding(t, self.time_dim)
+
+      x1 = self.inc(x)       
+      x2 = self.down1(x1, t)    
+      x2 = self.sa1(x2)            
+      x3 = self.down2(x2, t)       
+
+        
+      x3 = self.sa2(x3)
+      x3 = self.bot1(x3)
+      x3 = self.bot2(x3)
+
+      x = self.up1(x3, x2, t)        
+      x = self.sa4(x)        
+      x = self.up2(x, x1, t)
+        
+      output = self.outc(x)
+      return output
+
+
+
+
 if __name__ == '__main__':
     net = UNet_2xUD_halfchannels(device="cpu")
     # net = UNet(device="cpu")
