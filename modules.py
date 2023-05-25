@@ -307,9 +307,66 @@ class UNet_2xUD(nn.Module):
         x = self.sa6(x)
         output = self.outc(x)
         return output
-    
+
+class UNet_2xUD_halfchannels(nn.Module):
+    def __init__(self, c_in=3, c_out=3, time_dim=256, device="cuda"):
+        super().__init__()
+        self.device = device
+        self.time_dim = time_dim
+        self.inc = DoubleConv(c_in, 32)     # x1
+        self.down1 = Down(32, 64)
+        self.sa1 = SelfAttention(64, 16)   # x2
+        self.down2 = Down(64, 128)
+        self.sa2 = SelfAttention(128, 8)    # x3
+        # self.down3 = Down(256, 256)
+        # self.sa3 = SelfAttention(256, 4)  
+
+        self.bot1 = DoubleConv(128, 256)
+        self.bot2 = DoubleConv(256, 256)
+        self.bot3 = DoubleConv(256, 128)    # x4
+
+        # self.up1 = Up(512, 128)           # x4, x3 -> x
+        # self.sa4 = SelfAttention(128, 8)
+        self.up2 = Up(192, 64)              # x, x2 -> x 384 = 256+128 from skip connection
+        self.sa5 = SelfAttention(64, 16)
+        self.up3 = Up(96, 64)              # x, x1 -> x
+        self.sa6 = SelfAttention(64, 32)
+        self.outc = nn.Conv2d(64, c_out, kernel_size=1)
+
+    def pos_encoding(self, t, channels):
+        inv_freq = 1.0 / (
+            10000
+            ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
+        )
+        pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+        return pos_enc
+
+    def forward(self, x, t):
+        t = t.unsqueeze(-1).type(torch.float)
+        t = self.pos_encoding(t, self.time_dim)
+
+        x1 = self.inc(x)
+        x2 = self.down1(x1, t)
+        x2 = self.sa1(x2)
+        x3 = self.down2(x2, t)
+        x3 = self.sa2(x3)
+
+        x3 = self.bot1(x3)
+        x3 = self.bot2(x3)
+        x3 = self.bot3(x3)
+
+        x = self.up2(x3, x2, t)
+        x = self.sa5(x)
+        x = self.up3(x, x1, t)
+        x = self.sa6(x)
+        output = self.outc(x)
+        return output
+
 if __name__ == '__main__':
-    net = UNet(device="cpu")
+    net = UNet_2xUD_halfchannels(device="cpu")
+    # net = UNet(device="cpu")
     # net = UNet_conditional(num_classes=10, device="cpu")
     print(sum([p.numel() for p in net.parameters()]))
     # x = torch.randn(3, 3, 64, 64)
