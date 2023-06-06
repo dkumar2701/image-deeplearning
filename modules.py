@@ -424,11 +424,138 @@ class SmallUNet_1(nn.Module):
       output = self.outc(x)
       return output
 
+class Conv(nn.Module):
+    def __init__(self,  c_in=3, c_out=3, time_dim=256, device="cuda", ndf=64, ngf=64, nz=128):
+        super(Conv, self).__init__()
+        self.device = device
+        self.time_dim = time_dim
+
+        self.emb_layer1 = nn.Sequential(
+            # nn.SiLU(),
+            nn.Linear(
+                time_dim,
+                ndf*2
+            ),
+        )
+        self.emb_layer2 = nn.Sequential(
+            # nn.SiLU(),
+            nn.Linear(
+                time_dim,
+                ndf*4
+            ),
+        )
+        self.emb_layer3 = nn.Sequential(
+            # nn.SiLU(),
+            nn.Linear(
+                time_dim,
+                ngf*4
+            ),
+        )
+        self.emb_layer4 = nn.Sequential(
+            # nn.SiLU(),
+            nn.Linear(
+                time_dim,
+                ngf*2
+            ),
+        )
+
+        self.lrelu = nn.LeakyReLU(0.2, inplace=True)
+        self.relu = nn.ReLU(True)
+
+        self.cv1 = nn.Conv2d(c_in, ndf, 4, 2, 1, bias=False)
+        self.cv1v2 = nn.Conv2d(ndf, ndf, kernel_size=3, padding=1, bias=False)
+        # ndf x 16 x 16
+        self.cv2 = nn.Conv2d(ndf, ndf * 2, 4, 2, 1, bias=False)
+        self.cv2v2 = nn.Conv2d(ndf*2, ndf*2, kernel_size=3, padding=1, bias=False)
+        self.b1 = nn.BatchNorm2d(ndf * 2)
+        # ndf*2 x 8 x 8
+        self.cv3 = nn.Conv2d(ndf * 2, ndf * 4, 4, 2, 1, bias=False)
+        self.cv3v2 = nn.Conv2d(ndf*4, ndf*4, kernel_size=3, padding=1, bias=False)
+        self.b2 = nn.BatchNorm2d(ndf * 4)
+        # ndf*4 x 4 x 4
+
+        self.cvt1 = nn.ConvTranspose2d(ndf*4, ngf * 4, 4, 2, 1, bias=False)
+        self.cvt1v2 = nn.ConvTranspose2d(ngf*4, ngf * 4, kernel_size=3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(ngf * 4)
+        
+        # self.cvt2 = nn.ConvTranspose2d(ngf * 4, ngf * 4, 4, 2, 1, bias=False)
+        # self.bn2 = nn.BatchNorm2d(ngf * 4)
+
+        self.cvt3 = nn.ConvTranspose2d(ngf * 4, ngf*2, 4, 2, 1, bias=False)
+        self.cvt3v2 = nn.ConvTranspose2d(ngf*2, ngf * 2, kernel_size=3, padding=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(ngf*2)
+
+        self.cvt4 = nn.ConvTranspose2d(ngf*2, ngf, 4, 2, 1, bias=False)
+        # self.tanh = nn.Tanh()
+        self.outc = nn.Conv2d(ngf, c_out, kernel_size=1)
+
+    def pos_encoding(self, t, channels):
+        inv_freq = 1.0 / (
+            10000
+            ** (torch.arange(0, channels, 2, device=self.device).float() / channels)
+        )
+        pos_enc_a = torch.sin(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc_b = torch.cos(t.repeat(1, channels // 2) * inv_freq)
+        pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
+        return pos_enc
+
+    def forward(self, x, t):
+        t = t.unsqueeze(-1).type(torch.float)
+        t = self.pos_encoding(t, self.time_dim)
+
+        x = self.cv1(x)
+        x = self.cv1v2(x)
+        x = self.lrelu(x)
+        
+        x = self.cv2(x)
+        x = self.cv2v2(x)
+        x = self.b1(x)
+        x = self.lrelu(x)
+
+        emb_t = self.emb_layer1(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
+        x = x + emb_t
+
+        x = self.cv3(x)
+        x = self.cv3v2(x)
+        x = self.b2(x)
+        x = self.lrelu(x)
+
+        emb_t = self.emb_layer2(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
+        x = x + emb_t
+
+        x = self.cvt1(x)
+        x = self.cvt1v2(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+
+        emb_t = self.emb_layer3(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
+        x = x + emb_t
+
+        # x = self.cvt2(x)
+        # x = self.bn2(x)
+        # x = self.relu(x)
+
+        # emb_t = self.emb_layer3(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
+        # x = x + emb_t
+
+        x = self.cvt3(x)
+        x = self.cvt3v2(x)
+        x = self.bn3(x)
+        x = self.relu(x)
+
+        emb_t = self.emb_layer4(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
+        x = x + emb_t
+
+        x = self.cvt4(x)
+        # x = self.tanh(x)
+        x = self.outc(x)
+        return x
 
 
 
 if __name__ == '__main__':
-    net = UNet_2xUD_halfchannels(device="cpu")
+    net = Conv(device="cpu")
+    # net = UNet_2xUD_halfchannels(device="cpu")
     # net = UNet(device="cpu")
     # net = UNet_conditional(num_classes=10, device="cpu")
     print(sum([p.numel() for p in net.parameters()]))
