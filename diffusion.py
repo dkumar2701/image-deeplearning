@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 class diffusion_process(nn.Module):
     
@@ -10,8 +11,17 @@ class diffusion_process(nn.Module):
         beta_1 and beta_T are the variances for q(x_1|x_0) and q(x_T|x_{T-1}) respectively
         beta_T should be larger, and we'll linearly interpolate between these to set the variances of the diffusion process.
         """
+        # linear schedule
+        # self.variance_schedule = torch.linspace(beta_1, beta_T, time_steps)   #could be learned (Kingma et al), but we'll start with fixed.
         
-        self.variance_schedule = torch.linspace(beta_1, beta_T, time_steps)   #could be learned (Kingma et al), but we'll start with fixed.
+        # cosine schedule
+        s = 0.008
+        t = torch.linspace(0, time_steps, steps=time_steps+1)
+        f = torch.cos(((t / time_steps) + s) / (1 + s) * (math.pi / 2)) ** 2
+        alphas_hat = f / f[0]
+        betas = 1 - (alphas_hat[1:] / alphas_hat[:-1])
+        self.variance_schedule = torch.clip(betas, 0, beta_T)
+
         self.T = time_steps
         
         
