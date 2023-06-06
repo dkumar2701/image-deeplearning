@@ -3,3 +3,4 @@ data/
 models/CatGAN/archive
 runs/
 images/
+train-state.pt
